@@ -1146,7 +1146,15 @@ async function serveRequest(
   // out and routing becomes pure rating again. The shortfall only changes
   // when a request is served, so the faded call value is fixed for the
   // whole walk of one request: compute it once, here.
-  const fade = Math.max(0, Math.min(1, (300 - shortfallSoFar) / 120));
+  // The fade band: the call value is full while the shortfall is under
+  // FADE_BAND_START − FADE_BAND_SPAN, then fades linearly to zero at
+  // FADE_BAND_START, the edge of the quality band.
+  const FADE_BAND_START = 300;
+  const FADE_BAND_SPAN = 120;
+  const fade = Math.max(
+    0,
+    Math.min(1, (FADE_BAND_START - shortfallSoFar) / FADE_BAND_SPAN),
+  );
   const cv = CALL_VALUE * fade;
 
   let lastFailure: { status: number; detail: string } = {
