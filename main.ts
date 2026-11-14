@@ -849,12 +849,12 @@ function buildGeminiBody(req: CanonicalRequest, model: string): { url: string; b
       },
     ];
   }
-  const gen: Json = {};
-  if (req.maxTokens !== null) gen.maxOutputTokens = req.maxTokens;
-  if (req.hasStops) gen.stopSequences = req.stops;
-  if (req.jsonMode) gen.responseMimeType = 'application/json';
-  if (req.temperature !== undefined) gen.temperature = req.temperature;
-  if (Object.keys(gen).length > 0) body.generationConfig = gen;
+  const generationConfig: Json = {};
+  if (req.maxTokens !== null) generationConfig.maxOutputTokens = req.maxTokens;
+  if (req.hasStops) generationConfig.stopSequences = req.stops;
+  if (req.jsonMode) generationConfig.responseMimeType = 'application/json';
+  if (req.temperature !== undefined) generationConfig.temperature = req.temperature;
+  if (Object.keys(generationConfig).length > 0) body.generationConfig = generationConfig;
   return { url: '', body };
 }
 
@@ -1125,6 +1125,14 @@ function renderModelsJson(anthropicShape: boolean): string {
 
 let requestCounter = 0;
 
+/**
+ * Serve one workload request. Requests are matched to the manifest purely
+ * by arrival order (the env sends them strictly in order), so the counter
+ * above — not anything in the request body — decides which manifest
+ * entry's requirements and weight apply. When a provider answers, its
+ * canonical echo is rendered back in the client's own wire; when none
+ * can serve, the last failure is reported in the client's error shape.
+ */
 async function serveRequest(
   clientWire: 'openai' | 'anthropic',
   body: Json,
@@ -1145,16 +1153,11 @@ async function serveRequest(
   // approaches the band where quality would drop a point, the trade fades
   // out and routing becomes pure rating again. The shortfall only changes
   // when a request is served, so the faded call value is fixed for the
-  // whole walk of one request: compute it once, here.
-  // The fade band: the call value is full while the shortfall is under
-  // FADE_BAND_START − FADE_BAND_SPAN, then fades linearly to zero at
-  // FADE_BAND_START, the edge of the quality band.
+  // whole walk of one request: compute it once, here. The fade band starts
+  // at FADE_BAND_START weighted shortfall points and spans FADE_BAND_WIDTH.
   const FADE_BAND_START = 300;
-  const FADE_BAND_SPAN = 120;
-  const fade = Math.max(
-    0,
-    Math.min(1, (FADE_BAND_START - shortfallSoFar) / FADE_BAND_SPAN),
-  );
+  const FADE_BAND_WIDTH = 120;
+  const fade = Math.max(0, Math.min(1, (FADE_BAND_START - shortfallSoFar) / FADE_BAND_WIDTH));
   const cv = CALL_VALUE * fade;
 
   let lastFailure: { status: number; detail: string } = {
